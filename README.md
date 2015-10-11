@@ -6,7 +6,11 @@
 ## Sections
 - Evolutionary Algorithm
 - Pong Simulation
+  - Done
+  - Tested
 - Neural Net Evaluator
+  - Done
+  - Partly tested
 
 ## Evolutionary Algorithm
 - Should handle real-valued genomes represented as vector<double>

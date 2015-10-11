@@ -101,11 +101,11 @@ struct PongGame {
 	Point ball_pos = Point(0, 0), ball_vel = ball_start_vel;
 	double left_pos = 0, left_vel = 0;
 	double right_pos = 0, right_vel = 0;
-	PlayerController * left, * right;
-	PongGame(PlayerController * left, PlayerController * right) : left(left), right(right) {}
+	PlayerController & left, & right;
+	PongGame(PlayerController & left, PlayerController & right) : left(left), right(right) {}
 	void tick() {
 		// Get left velocity from controller
-		double left_cont = left->tick(vector<double>({
+		double left_cont = left.tick(vector<double>({
 			2*ball_pos.x/length, 2*ball_pos.y/width,
 			2*ball_vel.x/length, 2*ball_vel.y/width,
 			2*left_pos/width, 2*left_vel/width,
@@ -113,7 +113,7 @@ struct PongGame {
 		})).front() * paddle_max_vel;
 
 		// Get right velocity from controller
-		double right_cont = right->tick(vector<double>({
+		double right_cont = right.tick(vector<double>({
 			-2*ball_pos.x/length, -2*ball_pos.y/width,
 			-2*ball_vel.x/length, -2*ball_vel.y/width,
 			-2*right_pos/width, -2*right_vel/width,

@@ -1,5 +1,7 @@
 #include "Pong.cpp"
 #include <cmath>
+#include <chrono>
+#include <thread>
 
 struct SimplePlayer : PlayerController {
 	vector<double> tick(vector<double> state) override {
@@ -15,7 +17,7 @@ struct SimplePlayer : PlayerController {
 int main() {
 	SimplePlayer left;
 	SimplePlayer right;
-	PongGame pong(&left, &right);
+	PongGame pong(left, right);
 	while (max(pong.left_score, pong.right_score) < pong.max_score) {
 		cout << " ";
 		for (int i = 0; i < (int) pong.length / 10; ++i)
@@ -48,7 +50,8 @@ int main() {
 		cout << "right_pos: " << pong.right_pos << "\tright_vel: " << pong.right_vel << endl;
 		cout << "left_score: " << pong.left_score << "\tright_score: " << pong.right_score << endl;
 		pong.tick();
-		cin.ignore();
+		//cin.ignore();
+		this_thread::sleep_for(chrono::milliseconds(1000/pong.tickrate));
 	}
 	cout << "SCORES: " << pong.left_score << ", " << pong.right_score << endl;
 	return 0;
