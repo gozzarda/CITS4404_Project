@@ -12,9 +12,9 @@
 
 using namespace std;
 
-const vector<int> layers = {8, 8, 4, 2, 1};
-const int gen_size = 16;
-const int gen_limit = 256;
+const vector<int> layers = {8, 16, 1};
+const int gen_size = 32;
+const int gen_limit = 64;
 
 struct NeuroPlayer : PlayerController {
 	vector<int> layers;
@@ -26,7 +26,7 @@ struct NeuroPlayer : PlayerController {
 };
 
 void randomize_genomes(vector<vector<double>> & genomes) {
-	default_random_engine generator(chrono::high_resolution_clock::now().time_since_epoch().count());
+	default_random_engine generator(chrono::system_clock::now().time_since_epoch().count());
 	uniform_real_distribution<double> distribution(-1.0, 1.0);
 	auto rng = bind(distribution, generator);
 	for (auto & genome : genomes) {
@@ -34,23 +34,22 @@ void randomize_genomes(vector<vector<double>> & genomes) {
 	}
 }
 
-vector<int> selection(int keep, const vector<int> & population, const vector<vector<double>> & genomes) {
+vector<vector<double>> fittest(int keep, const vector<vector<double>> & population) {
 	map<int, pair<int, int>> scores;
-	for (int lp : population) {
-		for (int rp : population) {
-			if (lp == rp) continue;
-			//cout << "Game " << lp << " vs " << rp << endl;
-			NeuroPlayer left(layers, genomes[lp]);
-			NeuroPlayer right(layers, genomes[rp]);
+	for (int li = 0; li < population.size(); ++li) {
+		for (int ri = 0; ri < population.size(); ++ri) {
+			if (li == ri) continue;
+			NeuroPlayer left(layers, population[li]);
+			NeuroPlayer right(layers, population[ri]);
 			PongGame game(left, right);
 			game.simulate();
 			if (game.left_score > game.right_score) {
-				++scores[lp].first;
+				++scores[li].second;
 			} else {
-				++scores[rp].first;
+				++scores[ri].second;
 			}
-			scores[lp].second += game.left_returns;
-			scores[rp].second += game.right_returns;
+			scores[li].first += game.left_returns;
+			scores[ri].first += game.right_returns;
 		}
 	}
 	vector<pair<pair<int, int>, int>> rankings;
@@ -58,26 +57,38 @@ vector<int> selection(int keep, const vector<int> & population, const vector<vec
 		rankings.push_back(pair<pair<int, int>, int>(kv.second, kv.first));
 	}
 	partial_sort(rankings.begin(), rankings.begin() + keep, rankings.end(), greater<pair<pair<int, int>, int>>());
-	vector<int> selected;
+	vector<vector<double>> selected;
 	for (int i = 0; i < keep; ++i) {
-		selected.push_back(rankings[i].second);
+		selected.push_back(population[rankings[i].second]);
 	}
+	cerr << " Best score: <" << rankings.front().first.first << ", " << rankings.front().first.second << ">.";
 	return selected;
 }
 
-vector<double> crossover(const vector<double> & lp, const vector<double> & rp) {
+/*vector<double> crossover(const vector<double> & lp, const vector<double> & rp) {
 	if (lp.size() != rp.size()) throw "crossover: parent genome lengths do not match";
 	vector<double> result(lp);
-	default_random_engine generator(chrono::high_resolution_clock::now().time_since_epoch().count());
+	default_random_engine generator(chrono::system_clock::now().time_since_epoch().count());
 	uniform_int_distribution<int> selector(0, result.size());
 	for (int i = selector(generator); i < result.size(); ++i) {
 		result[i] = rp[i];
 	}
 	return result;
+}*/
+
+vector<double> crossover(const vector<double> & lp, const vector<double> & rp) {
+	if (lp.size() != rp.size()) throw "crossover: parent genome lengths do not match";
+	vector<double> result(lp);
+	default_random_engine generator(chrono::system_clock::now().time_since_epoch().count());
+	uniform_int_distribution<int> selector(0, 1);
+	for (int i = 0; i < result.size(); ++i) {
+		result[i] = (selector(generator) == 1) ? lp[i] : rp[i];
+	}
+	return result;
 }
 
 vector<double> mutation(const vector<double> & parent) {
-	default_random_engine generator(chrono::high_resolution_clock::now().time_since_epoch().count());
+	default_random_engine generator(chrono::system_clock::now().time_since_epoch().count());
 	uniform_int_distribution<int> selector(0, parent.size() - 1);
 	normal_distribution<double> distribution(0.0, 1.0);
 	vector<double> result = parent;
@@ -86,82 +97,74 @@ vector<double> mutation(const vector<double> & parent) {
 }
 
 int main() {
-	vector<vector<double>> genomes(gen_size, vector<double>(layers_to_weights(layers)));
-	randomize_genomes(genomes);
+	const int keep = (int) sqrt(gen_size);
 
-	vector<vector<int>> generations(1);
-	for (int i = 0; i < gen_size; ++i) {
-		generations.back().push_back(i);
-	}
+	vector<vector<double>> population(gen_size, vector<double>(layers_to_weights(layers)));
+	randomize_genomes(population);
 
 	for (int gen = 0; gen < gen_limit; ++gen) {
-		cout << "Evaulating generation " << gen << "...";
-		cout.flush();
+		cerr << "Evaulating generation " << gen << "...";
 
-		int keep = (int) sqrt(generations.back().size());
-		generations.push_back(selection(keep, generations.back(), genomes));
+		population = fittest(keep, population);
 
 		for (int i = 0; i < keep; ++i) {
 			for (int j = i + 1; j < keep; ++j) {
-				generations.back().push_back(genomes.size());
-				genomes.push_back(crossover(genomes[generations.back()[i]], genomes[generations.back()[j]]));
+				population.push_back(crossover(population[i], population[j]));
 			}
 		}
 
-		default_random_engine generator(chrono::high_resolution_clock::now().time_since_epoch().count());
+		default_random_engine generator(chrono::system_clock::now().time_since_epoch().count());
 		uniform_int_distribution<int> distribution(0, keep-1);
-		while (generations.back().size() < gen_size) {
-			int r = distribution(generator);
-			generations.back().push_back(genomes.size());
-			genomes.push_back(mutation(genomes[generations.back()[r]]));
+		while (population.size() < gen_size) {
+			population.push_back(mutation(population[distribution(generator)]));
 		}
 
-		cout << " Done." << endl;
+		cerr << " Done." << endl;
 	}
 
 	while (true) {
-		cout << "Press Enter to run simulation" << endl;
+		cerr << "Press Enter to run simulation" << endl;
 		cin.ignore();
-		cout << endl << endl << endl;
-		NeuroPlayer left(layers, genomes[generations.back().front()]);
-		NeuroPlayer right(layers, genomes[generations.back().front()]);
+		cerr << endl << endl << endl;
+		NeuroPlayer left(layers, population[0]);
+		NeuroPlayer right(layers, population[0]);
 		PongGame pong(left, right);
 		while (max(pong.left_score, pong.right_score) < pong.max_score) {
-			cout << " ";
+			cerr << " ";
 			for (int i = 0; i < (int) pong.length / 10; ++i)
-				cout << "=";
-			cout << " " << endl;
+				cerr << "=";
+			cerr << " " << endl;
 			for (int i = (int) -pong.width / 20; i <= (int) pong.width / 20; ++i) {
 				if (abs(pong.left_pos/10 - i) <= pong.paddle_width / 20)
-					cout << "|";
+					cerr << "|";
 				else
-					cout << " ";
+					cerr << " ";
 				for (int j = 0; j < (int) pong.length / 10; ++j) {
 					if ((int) (pong.ball_pos.y / 10) == i && (int) (pong.ball_pos.x / 10 + pong.length / 20) == j) {
-						cout << "O";
+						cerr << "O";
 					} else {
-						cout << " ";
+						cerr << " ";
 					}
 				}
 				if (abs(pong.right_pos/10 - i) <= pong.paddle_width / 20)
-					cout << "|";
+					cerr << "|";
 				else
-					cout << " ";
-				cout << endl;
+					cerr << " ";
+				cerr << endl;
 			}
-			cout << " ";
+			cerr << " ";
 			for (int i = 0; i < (int) pong.length / 10; ++i)
-				cout << "=";
-			cout << " " << endl;
-			cout << "ball_pos: " << pong.ball_pos << "\tball_vel: " << pong.ball_vel << endl;
-			cout << "left_pos: " << pong.left_pos << "\tleft_vel: " << pong.left_vel << endl;
-			cout << "right_pos: " << pong.right_pos << "\tright_vel: " << pong.right_vel << endl;
-			cout << "left_score: " << pong.left_score << "\tright_score: " << pong.right_score << endl;
+				cerr << "=";
+			cerr << " " << endl;
+			cerr << "ball_pos: " << pong.ball_pos << "\tball_vel: " << pong.ball_vel << endl;
+			cerr << "left_pos: " << pong.left_pos << "\tleft_vel: " << pong.left_vel << endl;
+			cerr << "right_pos: " << pong.right_pos << "\tright_vel: " << pong.right_vel << endl;
+			cerr << "left_score: " << pong.left_score << "\tright_score: " << pong.right_score << endl;
 			pong.tick();
 			//cin.ignore();
 			this_thread::sleep_for(chrono::milliseconds(1000/pong.tickrate));
 		}
-		cout << "SCORES: " << pong.left_score << ", " << pong.right_score << endl;
+		cerr << "SCORES: " << pong.left_score << ", " << pong.right_score << endl;
 	}
 	return 0;
 }

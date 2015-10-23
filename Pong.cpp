@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cmath>
 #include <utility>
+#include <limits>
 
 using namespace std;
 
@@ -30,6 +31,12 @@ struct Point {
 	}
 	double length() const {
 		return sqrt(x*x + y*y);
+	}
+	Point perp() const {
+		return Point(-y, x);
+	}
+	Point norm() const {
+		return Point(x, y) / length();
 	}
 	bool operator<(const Point& rhs) const {
 		if (x == rhs.x) return y < rhs.y;
@@ -84,6 +91,9 @@ struct Segment {
 	}
 	double length() const {
 		return (e - s).length();
+	}
+	bool operator==(const Segment& rhs) const {
+		return s == rhs.s && e == rhs.e;
 	}
 	friend ostream& operator<<(ostream& os, const Segment& rhs) {
 		os << rhs.s << " - " << rhs.e;
@@ -142,53 +152,31 @@ struct PongGame {
 		Segment left_seg(Point(-length/2, left_pos - paddle_width/2), Point(-length/2, left_pos + paddle_width/2));
 		Segment right_seg(Point(length/2, right_pos - paddle_width/2), Point(length/2, right_pos + paddle_width/2));
 
-		bool collision;
-		do {
-			collision = false;
-			pair<Point, inter_t> inter;
-			inter = mvmt.intersection(upr_wall);
-			if (inter.second == real && inter.first != mvmt.s) {
-				//cout << "\tBounce upper" << endl;
-				collision = true;
-				mvmt.s = inter.first;
-				mvmt.e.y = 2 * inter.first.y - mvmt.e.y;
-				ball_vel.y *= -1;
-				continue;
+		vector<Segment> collidees = {upr_wall, lwr_wall, left_seg, right_seg};
+		for (int hit = 0; hit >= 0;) {
+			hit = -1;
+			double best = numeric_limits<double>::max();
+			for (int i = 0; i < collidees.size(); ++i) {
+				auto inter = mvmt.intersection(collidees[i]);
+				if (inter.second >= real && inter.first != mvmt.s) {
+					if ((inter.first - mvmt.s).length() < best) {
+						best = (inter.first - mvmt.s).length();
+						hit = i;
+					}
+				}
 			}
-			inter = mvmt.intersection(lwr_wall);
-			if (inter.second == real && inter.first != mvmt.s) {
-				//cout << "\tBounce lower" << endl;
-				collision = true;
+			if (hit >= 0) {
+				Segment seg = collidees[hit];
+				collidees.erase(collidees.begin() + hit);
+				if (seg == left_seg) ++left_returns;
+				if (seg == right_seg) ++right_returns;
+				auto inter = mvmt.intersection(seg);
 				mvmt.s = inter.first;
-				mvmt.e.y = 2 * inter.first.y - mvmt.e.y;
-				ball_vel.y *= -1;
-				continue;
+				Point perpv = (seg.e - seg.s).perp().norm();
+				mvmt.e = mvmt.e - perpv * 2.0 * (perpv * (mvmt.e - mvmt.s));
+				ball_vel = ball_vel - perpv * 2.0 * (perpv * ball_vel);
 			}
-			inter = mvmt.intersection(left_seg);
-			if (inter.second == real && inter.first != mvmt.s) {
-				//cout << "\tLeft hit" << endl;
-				collision = true;
-				++left_returns;
-				mvmt.s = inter.first;
-				mvmt.e.x = 2 * inter.first.x - mvmt.e.x;
-				mvmt.e.y += left_vel * mvmt.length() / ball_vel.length();
-				ball_vel.x *= -1;
-				ball_vel.y += left_vel;
-				continue;
-			}
-			inter = mvmt.intersection(right_seg);
-			if (inter.second == real && inter.first != mvmt.s) {
-				//cout << "\tRight hit" << endl;
-				collision = true;
-				++right_returns;
-				mvmt.s = inter.first;
-				mvmt.e.x = 2 * inter.first.x - mvmt.e.x;
-				mvmt.e.y += right_vel * mvmt.length() / ball_vel.length();
-				ball_vel.x *= -1;
-				ball_vel.y += right_vel;
-				continue;
-			}
-		} while (collision);
+		}
 
 		ball_pos = mvmt.e;
 
@@ -207,10 +195,10 @@ struct PongGame {
 			right_pos = 0;
 		}
 
-		//assert(abs(ball_pos.y) <= width/2); // We should now still be inside bounds
+		assert(abs(ball_pos.y) <= width/2); // We should now still be inside bounds
 	}
-	pair<int, int> simulate(int timelimit = -1) {
-		if (timelimit < 0) timelimit = 2 * 4 * max_score * length / abs(ball_start_vel.x);
+	pair<int, int> simulate() {
+		int timelimit = 2 * 4 * max_score * length / abs(ball_start_vel.x);
 		while (max(left_score, right_score) < max_score && timelimit > 0) {
 			tick();
 			--timelimit;
