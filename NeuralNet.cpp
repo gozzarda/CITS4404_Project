@@ -19,7 +19,7 @@ double activation_function(double x) {
 }
 
 vector<double> evaluate_neural_net(const vector<int>& layers, const vector<double>& weights, const vector<double>& inputs) {
-	if (weights.size() != layers_to_weights(layers)) throw "evaluate_neural_net: layers and weights do not match"
+	if (weights.size() != layers_to_weights(layers)) throw "evaluate_neural_net: layers and weights do not match";
 	if (inputs.size() != layers.front()) throw "evaluate_neural_net: layers and input size do not match";
 	// Initialize previous layer as input layer values
 	vector<double> prev = inputs;

@@ -42,6 +42,9 @@ struct Point {
 	bool operator==(const Point& rhs) const {
 		return x == rhs.x && y == rhs.y;
 	}
+	bool operator!=(const Point& rhs) const {
+		return x != rhs.x || y != rhs.y;
+	}
 	friend ostream& operator<<(ostream& os, const Point& rhs) {
 		os << "(" << rhs.x << ", " << rhs.y << ")";
 		return os;
@@ -96,6 +99,7 @@ struct PongGame {
 	const int tickrate = 60;
 	const int max_score = 11;
 	int left_score = 0, right_score = 0;
+	int left_returns = 0, right_returns = 0;
 	const double length = 400, width = 300, paddle_width = width/5, paddle_max_vel = width/tickrate;
 	const Point ball_start_vel = Point(length/tickrate, length/tickrate);
 	Point ball_pos = Point(0, 0), ball_vel = ball_start_vel;
@@ -138,42 +142,63 @@ struct PongGame {
 		Segment left_seg(Point(-length/2, left_pos - paddle_width/2), Point(-length/2, left_pos + paddle_width/2));
 		Segment right_seg(Point(length/2, right_pos - paddle_width/2), Point(length/2, right_pos + paddle_width/2));
 
-		// Bounce off upper and lower walls
-		for (auto inter : {mvmt.intersection(upr_wall), mvmt.intersection(lwr_wall)}) {
-			if (inter.second == real) {
+		bool collision;
+		do {
+			collision = false;
+			pair<Point, inter_t> inter;
+			inter = mvmt.intersection(upr_wall);
+			if (inter.second == real && inter.first != mvmt.s) {
+				//cout << "\tBounce upper" << endl;
+				collision = true;
 				mvmt.s = inter.first;
 				mvmt.e.y = 2 * inter.first.y - mvmt.e.y;
 				ball_vel.y *= -1;
+				continue;
 			}
-		}
-
-		// Bounce off left paddle
-		auto left_int = mvmt.intersection(left_seg);
-		if (left_int.second == real) {
-			mvmt.s = left_int.first;
-			mvmt.e.x = 2 * left_int.first.x - mvmt.e.x;
-			mvmt.e.y += left_vel * mvmt.length() / ball_vel.length();
-			ball_vel.x *= -1;
-			ball_vel.y += left_vel;
-		}
-
-		// Bounce off right paddle
-		auto right_int = mvmt.intersection(right_seg);
-		if (right_int.second == real) {
-			mvmt.s = right_int.first;
-			mvmt.e.x = 2 * right_int.first.x - mvmt.e.x;
-			mvmt.e.y += right_vel * mvmt.length() / ball_vel.length();
-			ball_vel.x *= -1;
-			ball_vel.y += right_vel;
-		}
+			inter = mvmt.intersection(lwr_wall);
+			if (inter.second == real && inter.first != mvmt.s) {
+				//cout << "\tBounce lower" << endl;
+				collision = true;
+				mvmt.s = inter.first;
+				mvmt.e.y = 2 * inter.first.y - mvmt.e.y;
+				ball_vel.y *= -1;
+				continue;
+			}
+			inter = mvmt.intersection(left_seg);
+			if (inter.second == real && inter.first != mvmt.s) {
+				//cout << "\tLeft hit" << endl;
+				collision = true;
+				++left_returns;
+				mvmt.s = inter.first;
+				mvmt.e.x = 2 * inter.first.x - mvmt.e.x;
+				mvmt.e.y += left_vel * mvmt.length() / ball_vel.length();
+				ball_vel.x *= -1;
+				ball_vel.y += left_vel;
+				continue;
+			}
+			inter = mvmt.intersection(right_seg);
+			if (inter.second == real && inter.first != mvmt.s) {
+				//cout << "\tRight hit" << endl;
+				collision = true;
+				++right_returns;
+				mvmt.s = inter.first;
+				mvmt.e.x = 2 * inter.first.x - mvmt.e.x;
+				mvmt.e.y += right_vel * mvmt.length() / ball_vel.length();
+				ball_vel.x *= -1;
+				ball_vel.y += right_vel;
+				continue;
+			}
+		} while (collision);
 
 		ball_pos = mvmt.e;
 
 		if (abs(ball_pos.x) > length/2) {
 			if (ball_pos.x < 0) {
+				//cout << "\tRight SCORE" << endl;
 				++right_score;
 				ball_vel = ball_start_vel * -1;
 			} else {
+				//cout << "\tLeft SCORE" << endl;
 				++left_score;
 				ball_vel = ball_start_vel;
 			}
@@ -182,11 +207,14 @@ struct PongGame {
 			right_pos = 0;
 		}
 
-		assert(abs(ball_pos.y) <= width/2); // We should now still be inside bounds
+		//assert(abs(ball_pos.y) <= width/2); // We should now still be inside bounds
 	}
-	pair<int, int> simulate() {
-		while (max(left_score, right_score) < max_score)
+	pair<int, int> simulate(int timelimit = -1) {
+		if (timelimit < 0) timelimit = 2 * 4 * max_score * length / abs(ball_start_vel.x);
+		while (max(left_score, right_score) < max_score && timelimit > 0) {
 			tick();
+			--timelimit;
+		}
 		return pair<int, int>(left_score, right_score);
 	}
 };
