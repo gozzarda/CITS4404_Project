@@ -9,12 +9,13 @@
 #include <random>
 #include <map>
 #include <limits>
+#include <fstream>
 
 using namespace std;
 
 const vector<int> layers = {8, 16, 1};
-const int gen_size = 32;
-const int gen_limit = 64;
+const int gen_size = 128;
+const int gen_limit = 1024;
 
 struct NeuroPlayer : PlayerController {
 	vector<int> layers;
@@ -65,17 +66,6 @@ vector<vector<double>> fittest(int keep, const vector<vector<double>> & populati
 	return selected;
 }
 
-/*vector<double> crossover(const vector<double> & lp, const vector<double> & rp) {
-	if (lp.size() != rp.size()) throw "crossover: parent genome lengths do not match";
-	vector<double> result(lp);
-	default_random_engine generator(chrono::system_clock::now().time_since_epoch().count());
-	uniform_int_distribution<int> selector(0, result.size());
-	for (int i = selector(generator); i < result.size(); ++i) {
-		result[i] = rp[i];
-	}
-	return result;
-}*/
-
 vector<double> crossover(const vector<double> & lp, const vector<double> & rp) {
 	if (lp.size() != rp.size()) throw "crossover: parent genome lengths do not match";
 	vector<double> result(lp);
@@ -102,10 +92,21 @@ int main() {
 	vector<vector<double>> population(gen_size, vector<double>(layers_to_weights(layers)));
 	randomize_genomes(population);
 
+	ofstream fitlog("fittest." + to_string(chrono::system_clock::now().time_since_epoch().count()) + ".log");
+
 	for (int gen = 0; gen < gen_limit; ++gen) {
 		cerr << "Evaulating generation " << gen << "...";
 
 		population = fittest(keep, population);
+
+		fitlog << population.size() << endl;
+		for (auto & indiv : population) {
+			fitlog << indiv.size();
+			for (auto & gene : indiv) {
+				fitlog << " " << gene;
+			}
+			fitlog << endl;
+		}
 
 		for (int i = 0; i < keep; ++i) {
 			for (int j = i + 1; j < keep; ++j) {
@@ -121,6 +122,8 @@ int main() {
 
 		cerr << " Done." << endl;
 	}
+
+	fitlog.close();
 
 	while (true) {
 		cerr << "Press Enter to run simulation" << endl;
