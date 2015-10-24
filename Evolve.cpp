@@ -14,7 +14,7 @@
 using namespace std;
 
 const vector<int> layers = {8, 16, 1};
-const int gen_size = 128;
+const int gen_size = 32;
 const int gen_limit = 1024;
 
 struct NeuroPlayer : PlayerController {
@@ -92,7 +92,12 @@ int main() {
 	vector<vector<double>> population(gen_size, vector<double>(layers_to_weights(layers)));
 	randomize_genomes(population);
 
-	ofstream fitlog("fittest." + to_string(chrono::system_clock::now().time_since_epoch().count()) + ".log");
+	ofstream fitlog("fittest.log");
+	fitlog << layers.size();
+	for (auto l : layers) {
+		fitlog << " " << l;
+	}
+	firlog << endl;
 
 	for (int gen = 0; gen < gen_limit; ++gen) {
 		cerr << "Evaulating generation " << gen << "...";
@@ -132,32 +137,33 @@ int main() {
 		NeuroPlayer left(layers, population[0]);
 		NeuroPlayer right(layers, population[0]);
 		PongGame pong(left, right);
+		pong.max_score = 2;
 		while (max(pong.left_score, pong.right_score) < pong.max_score) {
-			cerr << " ";
-			for (int i = 0; i < (int) pong.length / 10; ++i)
-				cerr << "=";
-			cerr << " " << endl;
+			cout << " ";
+			for (int i = 0; i < 2 * (int) pong.length / 10; ++i)
+				cout << "=";
+			cout << " " << endl;
 			for (int i = (int) -pong.width / 20; i <= (int) pong.width / 20; ++i) {
-				if (abs(pong.left_pos/10 - i) <= pong.paddle_width / 20)
-					cerr << "|";
+				if (abs((int) pong.left_pos/10 - i) <= (int) pong.paddle_width / 20)
+					cout << "|";
 				else
-					cerr << " ";
-				for (int j = 0; j < (int) pong.length / 10; ++j) {
-					if ((int) (pong.ball_pos.y / 10) == i && (int) (pong.ball_pos.x / 10 + pong.length / 20) == j) {
-						cerr << "O";
+					cout << " ";
+				for (int j = 0; j < 2 * (int) pong.length / 10; ++j) {
+					if ((int) (pong.ball_pos.y / 10) == i && (int) (2 * (int) pong.ball_pos.x / 10 + 2 * (int) pong.length / 20) == j) {
+						cout << "O";
 					} else {
-						cerr << " ";
+						cout << " ";
 					}
 				}
-				if (abs(pong.right_pos/10 - i) <= pong.paddle_width / 20)
-					cerr << "|";
+				if (abs((int) pong.right_pos/10 - i) <= (int) pong.paddle_width / 20)
+					cout << "|";
 				else
-					cerr << " ";
-				cerr << endl;
+					cout << " ";
+				cout << endl;
 			}
-			cerr << " ";
-			for (int i = 0; i < (int) pong.length / 10; ++i)
-				cerr << "=";
+			cout << " ";
+			for (int i = 0; i < 2 * (int) pong.length / 10; ++i)
+				cout << "=";
 			cerr << " " << endl;
 			cerr << "ball_pos: " << pong.ball_pos << "\tball_vel: " << pong.ball_vel << endl;
 			cerr << "left_pos: " << pong.left_pos << "\tleft_vel: " << pong.left_vel << endl;

@@ -107,7 +107,7 @@ struct PlayerController {
 
 struct PongGame {
 	const int tickrate = 60;
-	const int max_score = 11;
+	int max_score = 1;
 	int left_score = 0, right_score = 0;
 	int left_returns = 0, right_returns = 0;
 	const double length = 400, width = 300, paddle_width = width/5, paddle_max_vel = width/tickrate;
@@ -182,11 +182,9 @@ struct PongGame {
 
 		if (abs(ball_pos.x) > length/2) {
 			if (ball_pos.x < 0) {
-				//cout << "\tRight SCORE" << endl;
 				++right_score;
 				ball_vel = ball_start_vel * -1;
 			} else {
-				//cout << "\tLeft SCORE" << endl;
 				++left_score;
 				ball_vel = ball_start_vel;
 			}
@@ -198,7 +196,7 @@ struct PongGame {
 		assert(abs(ball_pos.y) <= width/2); // We should now still be inside bounds
 	}
 	pair<int, int> simulate() {
-		int timelimit = 2 * 4 * max_score * length / abs(ball_start_vel.x);
+		int timelimit = 2 * 8 * max_score * length / abs(ball_start_vel.x);
 		while (max(left_score, right_score) < max_score && timelimit > 0) {
 			tick();
 			--timelimit;
