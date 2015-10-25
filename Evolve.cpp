@@ -97,7 +97,7 @@ int main() {
 	for (auto l : layers) {
 		fitlog << " " << l;
 	}
-	firlog << endl;
+	fitlog << endl;
 
 	for (int gen = 0; gen < gen_limit; ++gen) {
 		cerr << "Evaulating generation " << gen << "...";
