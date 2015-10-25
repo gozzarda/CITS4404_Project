@@ -4,6 +4,8 @@
 #include <cmath>
 #include <utility>
 #include <limits>
+#include <chrono>
+#include <random>
 
 using namespace std;
 
@@ -106,17 +108,24 @@ struct PlayerController {
 };
 
 struct PongGame {
-	const int tickrate = 60;
-	int max_score = 1;
+	const int tickrate = 60;	// For animation convenience
+	int max_score = 1;	// Tracked stats and limit
 	int left_score = 0, right_score = 0;
 	int left_returns = 0, right_returns = 0;
-	const double length = 400, width = 300, paddle_width = width/5, paddle_max_vel = width/tickrate;
+	int left_shots = 0, right_shots = 0;
+	const double length = 400, width = 300, paddle_width = width/8, paddle_max_vel = width/tickrate;	// Dimensions
 	const Point ball_start_vel = Point(length/tickrate, length/tickrate);
-	Point ball_pos = Point(0, 0), ball_vel = ball_start_vel;
-	double left_pos = 0, left_vel = 0;
+	Point ball_pos = Point(0, 0), ball_vel = ball_start_vel;	// Ball state
+	double left_pos = 0, left_vel = 0;	// Player states
 	double right_pos = 0, right_vel = 0;
-	PlayerController & left, & right;
-	PongGame(PlayerController & left, PlayerController & right) : left(left), right(right) {}
+	PlayerController & left, & right;	// Player controllers
+	bool enable_random = true;
+	default_random_engine generator;	// RNG for slight random deflection off paddles
+	normal_distribution<double> distribution;
+	PongGame(PlayerController & left, PlayerController & right) : left(left), right(right) {
+		generator = default_random_engine(chrono::system_clock::now().time_since_epoch().count());
+		distribution = normal_distribution<double>(0.0, 0.05);
+	}
 	void tick() {
 		// Get left velocity from controller
 		double left_cont = left.tick(vector<double>({
@@ -137,13 +146,25 @@ struct PongGame {
 		// Update paddle positions and velocities
 		left_vel = left_cont;
 		left_pos += left_vel;
-		if (left_pos < paddle_width/2 - width/2) left_pos = paddle_width/2 - width/2;
-		if (left_pos > width/2 - paddle_width/2) left_pos = width/2 - paddle_width/2;
+		if (left_pos < paddle_width/2 - width/2) {
+			left_pos = paddle_width/2 - width/2;
+			left_vel = 0;
+		}
+		if (left_pos > width/2 - paddle_width/2) {
+			left_pos = width/2 - paddle_width/2;
+			left_vel = 0;
+		}
 
 		right_vel = right_cont;
 		right_pos += right_vel;
-		if (right_pos < paddle_width/2 - width/2) right_pos = paddle_width/2 - width/2;
-		if (right_pos > width/2 - paddle_width/2) right_pos = width/2 - paddle_width/2;
+		if (right_pos < paddle_width/2 - width/2) {
+			right_pos = paddle_width/2 - width/2;
+			right_vel = 0;
+		}
+		if (right_pos > width/2 - paddle_width/2) {
+			right_pos = width/2 - paddle_width/2;
+			right_vel = 0;
+		}
 
 		// Prepare geometry segments
 		Segment mvmt(ball_pos, ball_pos + ball_vel);
@@ -152,10 +173,11 @@ struct PongGame {
 		Segment left_seg(Point(-length/2, left_pos - paddle_width/2), Point(-length/2, left_pos + paddle_width/2));
 		Segment right_seg(Point(length/2, right_pos - paddle_width/2), Point(length/2, right_pos + paddle_width/2));
 
+		// Do all collisions with segments
 		vector<Segment> collidees = {upr_wall, lwr_wall, left_seg, right_seg};
 		for (int hit = 0; hit >= 0;) {
 			hit = -1;
-			double best = numeric_limits<double>::max();
+			double best = numeric_limits<double>::max();	// Find closest collision first
 			for (int i = 0; i < collidees.size(); ++i) {
 				auto inter = mvmt.intersection(collidees[i]);
 				if (inter.second >= real && inter.first != mvmt.s) {
@@ -165,7 +187,7 @@ struct PongGame {
 					}
 				}
 			}
-			if (hit >= 0) {
+			if (hit >= 0) {	// Handle hit, including left and right paddle special conditions
 				Segment seg = collidees[hit];
 				collidees.erase(collidees.begin() + hit);
 				if (seg == left_seg) ++left_returns;
@@ -175,11 +197,29 @@ struct PongGame {
 				Point perpv = (seg.e - seg.s).perp().norm();
 				mvmt.e = mvmt.e - perpv * 2.0 * (perpv * (mvmt.e - mvmt.s));
 				ball_vel = ball_vel - perpv * 2.0 * (perpv * ball_vel);
+				if (seg == left_seg) ball_vel.y += left_vel;
+				if (seg == right_seg) ball_vel.y += right_vel;
+				if (enable_random && (seg == left_seg || seg == right_seg)) ball_vel.y += distribution(generator) * ball_start_vel.y;
 			}
 		}
 
-		ball_pos = mvmt.e;
+		ball_pos = mvmt.e;	// Update ball position
 
+		// Update shot statistics
+		// A shot is a tick in which the ball is headed to score
+		if (ball_vel.x < 0) {
+			double shotpos = ball_pos.y + (-length/2 - ball_pos.x) * ball_vel.y / ball_vel.x;
+			if (-width/2 <= shotpos && shotpos <= width/2)
+				if (left_pos - paddle_width/2 > shotpos || left_pos + paddle_width/2 < shotpos)
+					++right_shots;
+		} else if (ball_vel.x > 0) {
+			double shotpos = ball_pos.y + (length/2 - ball_pos.x) * ball_vel.y / ball_vel.x;
+			if (-width/2 <= shotpos && shotpos <= width/2)
+				if (right_pos - paddle_width/2 > shotpos || right_pos + paddle_width/2 < shotpos)
+					++left_shots;
+		}
+
+		// If a point has been scored, process it and reset state as appropriate
 		if (abs(ball_pos.x) > length/2) {
 			if (ball_pos.x < 0) {
 				++right_score;
@@ -195,8 +235,9 @@ struct PongGame {
 
 		assert(abs(ball_pos.y) <= width/2); // We should now still be inside bounds
 	}
+	// Run simulation until score or timelimit
 	pair<int, int> simulate() {
-		int timelimit = 2 * 8 * max_score * length / abs(ball_start_vel.x);
+		int timelimit = 2 * 16 * max_score * length / abs(ball_start_vel.x);
 		while (max(left_score, right_score) < max_score && timelimit > 0) {
 			tick();
 			--timelimit;

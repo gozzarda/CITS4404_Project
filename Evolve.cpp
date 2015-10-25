@@ -13,8 +13,9 @@
 
 using namespace std;
 
-const vector<int> layers = {8, 16, 1};
-const int gen_size = 32;
+// Config options
+const vector<int> layers = {8, 16, 4, 1};
+const int gen_size = 128;
 const int gen_limit = 1024;
 
 struct NeuroPlayer : PlayerController {
@@ -26,6 +27,7 @@ struct NeuroPlayer : PlayerController {
 	}
 };
 
+// Given a population of genomes, initalizes them with random values
 void randomize_genomes(vector<vector<double>> & genomes) {
 	default_random_engine generator(chrono::system_clock::now().time_since_epoch().count());
 	uniform_real_distribution<double> distribution(-1.0, 1.0);
@@ -35,6 +37,7 @@ void randomize_genomes(vector<vector<double>> & genomes) {
 	}
 }
 
+// Return the keep fittest genomes from population
 vector<vector<double>> fittest(int keep, const vector<vector<double>> & population) {
 	map<int, pair<int, int>> scores;
 	for (int li = 0; li < population.size(); ++li) {
@@ -44,19 +47,21 @@ vector<vector<double>> fittest(int keep, const vector<vector<double>> & populati
 			NeuroPlayer right(layers, population[ri]);
 			PongGame game(left, right);
 			game.simulate();
+			// Prioritize plays, then wins, as even a bad player can score a lucky win
+			scores[li].first += game.left_returns + game.left_shots;
+			scores[ri].first += game.right_returns + game.right_shots;
 			if (game.left_score > game.right_score) {
 				++scores[li].second;
 			} else {
 				++scores[ri].second;
 			}
-			scores[li].first += game.left_returns;
-			scores[ri].first += game.right_returns;
 		}
 	}
 	vector<pair<pair<int, int>, int>> rankings;
 	for (auto & kv : scores) {
 		rankings.push_back(pair<pair<int, int>, int>(kv.second, kv.first));
 	}
+	// Sort to find keep fittest individuals
 	partial_sort(rankings.begin(), rankings.begin() + keep, rankings.end(), greater<pair<pair<int, int>, int>>());
 	vector<vector<double>> selected;
 	for (int i = 0; i < keep; ++i) {
@@ -66,6 +71,8 @@ vector<vector<double>> fittest(int keep, const vector<vector<double>> & populati
 	return selected;
 }
 
+// Given two parents, return a mix of them
+// Randomized mixing to better suit neural net weights
 vector<double> crossover(const vector<double> & lp, const vector<double> & rp) {
 	if (lp.size() != rp.size()) throw "crossover: parent genome lengths do not match";
 	vector<double> result(lp);
@@ -77,6 +84,7 @@ vector<double> crossover(const vector<double> & lp, const vector<double> & rp) {
 	return result;
 }
 
+// Given a parent, return a mutation of it
 vector<double> mutation(const vector<double> & parent) {
 	default_random_engine generator(chrono::system_clock::now().time_since_epoch().count());
 	uniform_int_distribution<int> selector(0, parent.size() - 1);
@@ -87,11 +95,14 @@ vector<double> mutation(const vector<double> & parent) {
 }
 
 int main() {
+	// keep survivors + keep^2/2 crossovers + mutations = gen_size;
 	const int keep = (int) sqrt(gen_size);
 
+	// Initialize population
 	vector<vector<double>> population(gen_size, vector<double>(layers_to_weights(layers)));
 	randomize_genomes(population);
 
+	// Log generations for later replay
 	ofstream fitlog("fittest.log");
 	fitlog << layers.size();
 	for (auto l : layers) {
@@ -99,11 +110,14 @@ int main() {
 	}
 	fitlog << endl;
 
+	// Simple fixed number of generations
 	for (int gen = 0; gen < gen_limit; ++gen) {
 		cerr << "Evaulating generation " << gen << "...";
 
+		// Take the survivors from the previous generation
 		population = fittest(keep, population);
 
+		// Log them
 		fitlog << population.size() << endl;
 		for (auto & indiv : population) {
 			fitlog << indiv.size();
@@ -113,12 +127,14 @@ int main() {
 			fitlog << endl;
 		}
 
+		// Add all keep^2/2 crossovers
 		for (int i = 0; i < keep; ++i) {
 			for (int j = i + 1; j < keep; ++j) {
 				population.push_back(crossover(population[i], population[j]));
 			}
 		}
 
+		// Bolster with randomly selected mutations to achieve gen_size
 		default_random_engine generator(chrono::system_clock::now().time_since_epoch().count());
 		uniform_int_distribution<int> distribution(0, keep-1);
 		while (population.size() < gen_size) {
@@ -130,6 +146,7 @@ int main() {
 
 	fitlog.close();
 
+	// When we are done, animate the best player from the last generation playing against itself for the user.
 	while (true) {
 		cerr << "Press Enter to run simulation" << endl;
 		cin.ignore();
@@ -170,7 +187,6 @@ int main() {
 			cerr << "right_pos: " << pong.right_pos << "\tright_vel: " << pong.right_vel << endl;
 			cerr << "left_score: " << pong.left_score << "\tright_score: " << pong.right_score << endl;
 			pong.tick();
-			//cin.ignore();
 			this_thread::sleep_for(chrono::milliseconds(1000/pong.tickrate));
 		}
 		cerr << "SCORES: " << pong.left_score << ", " << pong.right_score << endl;

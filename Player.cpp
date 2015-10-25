@@ -2,6 +2,7 @@
 #include "NeuralNet.cpp"
 #include <cmath>
 #include <chrono>
+#include <random>
 #include <thread>
 #include <vector>
 #include <fstream>
@@ -21,6 +22,7 @@ int main(int argc, char * argv[]) {
 	vector<int> layers;
 	vector<vector<vector<double>>> generations;
 
+	// Load generations from log
 	ifstream fitlog;
 	if (argc < 2) {
 		fitlog.open("fittest.log");
@@ -65,11 +67,12 @@ int main(int argc, char * argv[]) {
 	int gen;
 	cin >> gen;
 
+	// Repeatedly prompt the user for which generation to animate
 	while (0 <= gen && gen < generations.size()) {
 		NeuroPlayer left(layers, generations[gen][0]);
 		NeuroPlayer right(layers, generations[gen][0]);
 		PongGame pong(left, right);
-		pong.max_score = 2;
+		pong.max_score = 3;
 		while (max(pong.left_score, pong.right_score) < pong.max_score) {
 			cout << " ";
 			for (int i = 0; i < 2 * (int) pong.length / 10; ++i)
